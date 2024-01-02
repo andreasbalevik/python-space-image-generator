@@ -1,7 +1,7 @@
 
 
 # Space Image Generator
-Space image generator written in Python. This is a classic collaboration project with ChatGPT where he coded most of it and I decided. No real purpose, just for fun.
+Space image generator written in Python. This is a classic collaboration project where ChatGPT coded most of it, and I quality tested it and provided constructive feedback. No real purpose, just for fun.
 
 ## Example Images
 ![Example Image 1](examples/transmission_380136.png)
