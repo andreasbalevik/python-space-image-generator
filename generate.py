@@ -12,25 +12,24 @@ parser.add_argument("-num", "--number", type=int, default=1, help="Number of ima
 args = parser.parse_args()
 num_images = args.number  # Use the number from the command-line argument
 
-# Color filter
-bayer_filter_enabled = False;  # Enable Bayer filter effect
-leica_filter_enabled = True;  # Enable Leica color processing effect
-
-# Other filters
-blur_filter_enabled = False;  # Enable blur filter effect
-display_images_enabled = False;  # Enable displaying images
+# Feature toggles
+bayer_filter_enabled = True  # Enable Bayer filter effect
+leica_filter_enabled = True  # Enable Leica color processing effect
+blur_filter_enabled = False  # Enable blur filter effect
+display_images_enabled = False  # Enable displaying images
+center_planet_enabled = False  # Enable centering the planet
 
 # Configurable variables
-image_dimensions = (412, 212)
+image_dimensions = (400, 400)
 height, width = image_dimensions
 star_count_range = (500, 1500)
 output_folder = 'generated-images'
 
 # Nebula color configuration
 nebula_color_factors = {
-    "red_factor": (0.4, 1.0),
-    "green_factor": (0.3, 1.0),
-    "blue_factor": (0.4, 1.0)
+    "red_factor": (0.1, 1.0),
+    "green_factor": (0.1, 1.0),
+    "blue_factor": (0.1, 1.0)
 }
 
 # General configuration for celestial bodies
@@ -110,7 +109,7 @@ def add_atmosphere(img, center, radius, width, height):
                         distance_from_edge = np.sqrt(dist_squared) - radius
                         opacity_factor = 1 - distance_from_edge / atmosphere_thickness
                         img[coord_y, coord_x] = np.clip(opacity_factor * atmosphere_color + (1 - opacity_factor) * img[coord_y, coord_x], 0, 255)
-                        
+
 def create_asteroids(img, planet_center, planet_radius, elements, width, height, light_source_angle):
     asteroid_config = elements["asteroid"]
     if np.random.rand() < asteroid_config["probability"]:
@@ -232,7 +231,6 @@ def create_celestial_body(img, body_type, center, size, elements, width, height)
     add_glow(img, center, size, glow_color, glow_intensity, width, height)
     add_atmosphere(img, center, size, width, height)
 
-
 def generate_nebula_like_image(dimensions, star_count_range, elements, color_factors):
     width, height = dimensions
     base_noise = np.random.standard_normal([height, width, 3])
@@ -262,7 +260,10 @@ def generate_nebula_like_image(dimensions, star_count_range, elements, color_fac
         if np.random.rand() < elements[body_type]["probability"]:
             if body_type == "planet":
                 planet_radius = np.random.randint(*celestial_bodies[body_type]["size_range"])
-                planet_center = generate_planet_center(width, height, planet_radius, max_planet_radius)
+                if center_planet_enabled:
+                    planet_center = (width // 2, height // 2)
+                else:
+                    planet_center = generate_planet_center(width, height, planet_radius, max_planet_radius)
                 light_source_angle = closest_corner_angle(planet_center, width, height)
                 create_celestial_body(nebula_colors, body_type, planet_center, planet_radius, celestial_bodies, width, height)
                 add_shadow(nebula_colors, planet_center, planet_radius, width, height, light_source_angle)
@@ -411,7 +412,6 @@ def save_image(image, folder=output_folder):
 
     print(f"Image saved as {path}")
 
-    
 def apply_bayer_filter(image):
     height, width, _ = image.shape
     for y in range(height):
@@ -434,8 +434,8 @@ def apply_leica_color_processing(image):
     processed_image = image.astype(np.float32)
 
     # Increase saturation and contrast
-    saturation_factor = 1.3  # Increase this to boost colors more
-    contrast_factor = 1.1    # Increase this to make the image more contrasty
+    saturation_factor = 1.6  # Increase this to boost colors more
+    contrast_factor = 8.1    # Increase this to make the image more contrasty
 
     # Convert to HSV to adjust saturation
     hsv_image = cv2.cvtColor(processed_image, cv2.COLOR_RGB2HSV)
