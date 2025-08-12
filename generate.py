@@ -17,7 +17,7 @@ bayer_filter_enabled = True  # Enable Bayer filter effect
 leica_filter_enabled = True  # Enable Leica color processing effect
 blur_filter_enabled = False  # Enable blur filter effect
 display_images_enabled = False  # Enable displaying images
-center_planet_enabled = False  # Enable centering the planet
+center_planet_enabled = True  # Enable centering the planet
 
 # Configurable variables
 image_dimensions = (400, 400)
@@ -181,6 +181,30 @@ def add_asteroid_shadow(img, center, radius, width, height, light_source_angle):
                     shadow_intensity_factor = angle_intensity * distance_intensity * shadow_intensity
                     img[coord_y, coord_x] = np.clip(img[coord_y, coord_x] * shadow_intensity_factor, 0, 255).astype(np.uint8)
 
+
+def generate_surface_noise(size):
+    """Generate layered noise for planetary surface texturing.
+
+    The previous implementation assumed the intermediate noise arrays would
+    always have a positive size. When the celestial body radius was small and
+    the frequency grew larger than the dimensions, the calculated shape became
+    ``(0, 0)`` which caused ``cv2.resize`` to raise an assertion error. To avoid
+    this we clamp the intermediate dimensions to at least 1x1 before resizing.
+    """
+
+    noise = np.zeros((size * 2, size * 2), dtype=np.float32)
+    frequency = np.random.uniform(2.0, 5.0)
+    for _ in range(4):
+        small_dim = max(1, int((size * 2) / frequency))
+        small_noise = np.random.rand(small_dim, small_dim).astype(np.float32)
+        small_noise = cv2.resize(small_noise, (size * 2, size * 2))
+        noise += small_noise / frequency
+        frequency *= 2
+
+    if noise.max() > noise.min():
+        noise = (noise - noise.min()) / (noise.max() - noise.min())
+    return noise
+
 def create_celestial_body(img, body_type, center, size, elements, width, height):
     body_config = elements[body_type]
     base_color = np.random.randint(*body_config["color_range"], size=3)
@@ -188,6 +212,8 @@ def create_celestial_body(img, body_type, center, size, elements, width, height)
     outline_thickness = body_config["outline_thickness"]
 
     draw_circle_with_outline(img, center, size, base_color, outline_color, outline_thickness, width, height)
+
+    surface_noise = generate_surface_noise(size)
 
     terrain_types = {
         "land": {"color_variation": (-20, 20), "probability": 0.6},
@@ -222,7 +248,9 @@ def create_celestial_body(img, body_type, center, size, elements, width, height)
                         coord_y = center[1] + y + dy
                         coord_x = center[0] + x + dx
                         if 0 <= coord_y < height and 0 <= coord_x < width and (dx**2 + dy**2 <= (size - outline_thickness)**2):
-                            img[coord_y, coord_x] = patch_color
+                            noise_val = surface_noise[y + size + dy, x + size + dx]
+                            varied_color = np.clip(patch_color * (0.7 + 0.3 * noise_val), 0, 255)
+                            img[coord_y, coord_x] = varied_color
 
     # Add glow effect
     glow_color = np.array([255, 255, 180])  # Soft yellow-white glow
@@ -320,37 +348,19 @@ def apply_color_boost(img, intensity=1.1):
     return img_boosted
 
 def add_shadow(img, center, radius, width, height, light_source_angle):
-    # Variable assignments
-    min_shadow_intensity = light_source_angle / 3  # Minimum intensity of the shadow
-    max_shadow_intensity = light_source_angle * np.pi / 5  # Maximum intensity of the shadow
-    shadow_variability = np.random.uniform(min_shadow_intensity, max_shadow_intensity)
-
-    # Additional variability factors
-    shadow_angle_variation = np.random.uniform(light_source_angle / shadow_variability)  # Variability in angle
-    shadow_distance_variation = np.random.uniform(light_source_angle * np.pi * shadow_variability)  # Variability in distance effect
-
-    # Iterate over a circular region defined by the radius around the center
+    light_dir = np.array([np.cos(light_source_angle), np.sin(light_source_angle)])
     for y in range(-radius, radius):
         for x in range(-radius, radius):
             if x**2 + y**2 <= radius**2:
                 coord_y = center[1] + y
                 coord_x = center[0] + x
                 if 0 <= coord_y < height and 0 <= coord_x < width:
-                    distance_from_center = np.sqrt(x**2 + y**2)
-
-                    # Calculate angle and apply variability
-                    angle = np.arctan2(y, x) + shadow_angle_variation
-
-                    # Shadow intensity calculations with more variability
-                    relative_distance = distance_from_center / (radius * shadow_distance_variation)
-                    angle_intensity = (np.cos(angle - light_source_angle) + np.random.rand()) / 2
-                    distance_intensity = 1 - np.clip(relative_distance, 0, 1)  # Stronger at edge, lighter at center
-
-                    # Final shadow intensity considering angle, distance, and variability
-                    shadow_intensity = angle_intensity * distance_intensity * shadow_variability
-
-                    # Apply the shadow intensity to the image
-                    img[coord_y, coord_x] = img[coord_y, coord_x] * np.clip(shadow_intensity, 0, np.random.uniform(min_shadow_intensity, max_shadow_intensity))
+                    normal = np.array([x, y]) / radius
+                    intensity = np.dot(normal, light_dir)
+                    shade = 0.5 + 0.5 * intensity
+                    shade += np.random.uniform(-0.05, 0.05)
+                    shade = np.clip(shade, 0, 1)
+                    img[coord_y, coord_x] = np.clip(img[coord_y, coord_x] * shade, 0, 255)
 
 def closest_corner_angle(center, width, height):
     # Define the corners of the image
