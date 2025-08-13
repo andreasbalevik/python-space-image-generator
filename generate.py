@@ -17,7 +17,7 @@ bayer_filter_enabled = True  # Enable Bayer filter effect
 leica_filter_enabled = True  # Enable Leica color processing effect
 blur_filter_enabled = False  # Enable blur filter effect
 display_images_enabled = False  # Enable displaying images
-center_planet_enabled = False  # Enable centering the planet
+center_planet_enabled = True  # Enable centering the planet
 
 # Configurable variables
 image_dimensions = (400, 400)
@@ -167,19 +167,32 @@ def draw_circle_with_outline(img, center, radius, color, outline_color, outline_
                         img[coord_y, coord_x] = pixel_color
 
 def add_asteroid_shadow(img, center, radius, width, height, light_source_angle):
-    shadow_intensity = 0.6  # Adjust this for darker/lighter shadows
+    """Apply a basic Lambertian shading model to an asteroid.
+
+    The previous approach darkened pixels based purely on their distance from
+    the center and a simple angular offset. This produced flat-looking bodies.
+    The new implementation approximates a sphere and shades each pixel based on
+    the dot product of the surface normal and the light direction, yielding a
+    smoother and more realistic shadow.
+    """
+
+    light_dir = np.array([np.cos(light_source_angle), np.sin(light_source_angle), 1.0])
+    light_dir = light_dir / np.linalg.norm(light_dir)
+    ambient = 0.3  # Baseline light so asteroids aren't completely black
+
     for y in range(-radius, radius):
         for x in range(-radius, radius):
             if x**2 + y**2 <= radius**2:
                 coord_y = center[1] + y
                 coord_x = center[0] + x
                 if 0 <= coord_y < height and 0 <= coord_x < width:
-                    angle_to_light = np.arctan2(y, x) + light_source_angle
-                    distance_from_center = np.sqrt(x**2 + y**2)
-                    angle_intensity = (np.cos(angle_to_light) + 1) / 2
-                    distance_intensity = 1 - np.clip(distance_from_center / radius, 0, 1)
-                    shadow_intensity_factor = angle_intensity * distance_intensity * shadow_intensity
-                    img[coord_y, coord_x] = np.clip(img[coord_y, coord_x] * shadow_intensity_factor, 0, 255).astype(np.uint8)
+                    z = np.sqrt(max(radius**2 - (x**2 + y**2), 0))
+                    normal = np.array([x, y, z]) / radius
+                    intensity = np.clip(np.dot(normal, light_dir), 0, 1) ** 0.5
+                    shade = ambient + (1 - ambient) * intensity
+                    img[coord_y, coord_x] = (
+                        np.clip(img[coord_y, coord_x] * shade, 0, 255).astype(np.uint8)
+                    )
 
 
 def generate_surface_noise(size):
