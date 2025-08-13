@@ -17,7 +17,7 @@ bayer_filter_enabled = True  # Enable Bayer filter effect
 leica_filter_enabled = True  # Enable Leica color processing effect
 blur_filter_enabled = False  # Enable blur filter effect
 display_images_enabled = False  # Enable displaying images
-center_planet_enabled = True  # Enable centering the planet
+center_planet_enabled = False  # Enable centering the planet
 
 # Configurable variables
 image_dimensions = (400, 400)
